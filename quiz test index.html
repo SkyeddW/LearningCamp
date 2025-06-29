@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Interactive Quiz</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      /* Flower background using SVG pattern */
+      background: #cce7ff url('data:image/svg+xml;utf8,<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="18" fill="%23f9c2ff"/><circle cx="30" cy="40" r="12" fill="%23fff"/><circle cx="70" cy="60" r="12" fill="%23fff"/><circle cx="40" cy="70" r="8" fill="%23f9c2ff"/><circle cx="60" cy="30" r="8" fill="%23f9c2ff"/></svg>') repeat;
+      background-size: 120px 120px;
+    }
+    #quiz-box {
+      background: linear-gradient(135deg, #3b82f6 80%, #60a5fa 100%);
+      padding: 28px 28px 18px 28px;
+      max-width: 520px;
+      margin: 40px auto 30px auto;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(34, 58, 122, 0.18);
+      color: #fff;
+      position: relative;
+      z-index: 1;
+      min-height: 320px;
+      transition: box-shadow 0.4s;
+    }
+    .question {
+      font-weight: bold;
+      margin-bottom: 12px;
+      font-size: 1.2em;
+    }
+    .answers label {
+      display: block;
+      margin-bottom: 9px;
+      cursor: pointer;
+      padding: 7px 10px;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    .answers label:hover {
+      background: rgba(255,255,255,0.13);
+    }
+    .answers input[type="radio"] {
+      accent-color: #60a5fa;
+      margin-right: 7px;
+    }
+    button {
+      background: linear-gradient(90deg, #2563eb 60%, #60a5fa 100%);
+      color: #fff;
+      border: none;
+      padding: 10px 32px;
+      border-radius: 7px;
+      font-size: 1.08em;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    button:hover:enabled {
+      background: linear-gradient(90deg, #1d4ed8 60%, #3b82f6 100%);
+      box-shadow: 0 4px 14px rgba(59,130,246,0.17);
+    }
+    .result {
+      font-size: 1.3em;
+      margin-top: 28px;
+      font-weight: bold;
+      color: #e0f2fe;
+      text-align: center;
+      text-shadow: 0 2px 6px #2563eb80;
+    }
+    .answer-list {
+      margin-top: 25px;
+      color: #e0e7ef;
+    }
+    .answer-list h3 {
+      color: #fff;
+    }
+    .correct { color: #bbf7d0; }
+    .incorrect { color: #fecaca; }
+    /* Fireworks canvas */
+    #fireworks-canvas {
+      display: none;
+      position: fixed;
+      left: 0; top: 0; width: 100vw; height: 100vh;
+      pointer-events: none;
+      z-index: 99;
+    }
+    @media (max-width: 600px) {
+      #quiz-box { padding: 12px; max-width: 98vw; }
+      .result { font-size: 1.1em; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Fireworks Canvas -->
+  <canvas id="fireworks-canvas"></canvas>
+
+  <div id="quiz-box">
+    <div id="quiz"></div>
+    <button id="next-btn" onclick="nextQuestion()">Next</button>
+    <div id="result" class="result"></div>
+    <div id="answers" class="answer-list"></div>
+  </div>
+  <script>
+    // --- Quiz logic ---
+    const questions = [
+      {
+        question: "What is the capital of France?",
+        options: ["Berlin", "Madrid", "Paris", "Rome"],
+        answer: 2
+      },
+      {
+        question: "Which planet is known as the Red Planet?",
+        options: ["Earth", "Mars", "Jupiter", "Saturn"],
+        answer: 1
+      },
+      {
+        question: "Who wrote 'To Be, or Not to Be'?",
+        options: ["Charles Dickens", "William Shakespeare", "J.K. Rowling", "Mark Twain"],
+        answer: 1
+      }
+    ];
+
+    let currentQuestion = 0;
+    let userAnswers = [];
+    let score = 0;
+
+    function showQuestion() {
+      document.getElementById('result').textContent = '';
+      document.getElementById('answers').innerHTML = '';
+      const q = questions[currentQuestion];
+      let quizHTML = `<div class="question">${q.question}</div><div class="answers">`;
+      q.options.forEach((opt, idx) => {
+        quizHTML += `
+          <label>
+            <input type="radio" name="option" value="${idx}">
+            ${opt}
+          </label>`;
+      });
+      quizHTML += '</div>';
+      document.getElementById('quiz').innerHTML = quizHTML;
+      document.getElementById('next-btn').disabled = false;
+      document.getElementById('next-btn').textContent = currentQuestion === questions.length - 1 ? "Finish" : "Next";
+    }
+
+    function nextQuestion() {
+      const radios = document.getElementsByName('option');
+      let selected = -1;
+      for (let i = 0; i < radios.length; i++) {
+        if (radios[i].checked) {
+          selected = parseInt(radios[i].value, 10);
+          break;
+        }
+      }
+      if (selected === -1) {
+        alert("Please select an answer!");
+        return;
+      }
+      userAnswers[currentQuestion] = selected;
+      if (selected === questions[currentQuestion].answer) {
+        score++;
+      }
+      currentQuestion++;
+      if (currentQuestion < questions.length) {
+        showQuestion();
+      } else {
+        showResults();
+        launchFireworks();
+      }
+    }
+
+    function showResults() {
+      document.getElementById('quiz').innerHTML = '';
+      document.getElementById('next-btn').style.display = 'none';
+      document.getElementById('result').textContent = `You scored ${score} out of ${questions.length}!`;
+
+      let answersHTML = '<h3>Answers:</h3><ol>';
+      questions.forEach((q, idx) => {
+        const isCorrect = userAnswers[idx] === q.answer;
+        answersHTML += `<li>
+          <span class="${isCorrect ? 'correct' : 'incorrect'}">
+            ${q.question}<br>
+            Your answer: ${q.options[userAnswers[idx]] || 'No answer'}<br>
+            Correct answer: ${q.options[q.answer]}
+          </span>
+        </li>`;
+      });
+      answersHTML += '</ol>';
+      document.getElementById('answers').innerHTML = answersHTML;
+    }
+
+    // Start the quiz
+    showQuestion();
+
+    // --- Fireworks Animation ---
+    // Adapted, simplified for quiz use
+    function launchFireworks() {
+      const canvas = document.getElementById('fireworks-canvas');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      canvas.style.display = 'block';
+      let ctx = canvas.getContext('2d');
+      let particles = [];
+      let fireworks = [];
+      let colors = ['#fff', '#f87171', '#34d399', '#60a5fa', '#fbbf24', '#f472b6', '#a78bfa', '#fde68a'];
+
+      function createFirework() {
+        let x = Math.random() * canvas.width * 0.8 + canvas.width * 0.1;
+        let y = Math.random() * canvas.height * 0.4 + canvas.height * 0.1;
+        let color = colors[Math.floor(Math.random() * colors.length)];
+        let count = 32 + Math.floor(Math.random() * 16);
+        for (let i = 0; i < count; i++) {
+          let angle = (Math.PI * 2) * (i / count);
+          let speed = 2 + Math.random() * 2;
+          particles.push({
+            x: x, y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            alpha: 1,
+            color: color
+          });
+        }
+      }
+
+      let fireworkTimes = 7;
+      let fireworkInterval = setInterval(() => {
+        createFirework();
+        fireworkTimes--;
+        if (fireworkTimes <= 0) clearInterval(fireworkInterval);
+      }, 420);
+
+      function animate() {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'rgba(30, 58, 138, 0.27)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'lighter';
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          let p = particles[i];
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 2.1, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.alpha;
+          ctx.fill();
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.016; // gravity
+          p.alpha -= 0.014 + Math.random()*0.006;
+          if (p.alpha <= 0) particles.splice(i, 1);
+        }
+
+        ctx.globalAlpha = 1;
+        if (particles.length > 0 || fireworkTimes > 0) {
+          requestAnimationFrame(animate);
+        } else {
+          setTimeout(() => {
+            canvas.style.display = 'none';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }, 1200);
+        }
+      }
+      animate();
+    }
+
+    // Adjust fireworks canvas on resize
+    window.addEventListener('resize', () => {
+      const canvas = document.getElementById('fireworks-canvas');
+      if (canvas.style.display === 'block') {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+    });
+  </script>
+</body>
+</html>
